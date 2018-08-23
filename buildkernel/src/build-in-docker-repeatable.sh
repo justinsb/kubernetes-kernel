@@ -1,14 +1,19 @@
 #!/bin/bash
 
 VERSION=$1
+DISTDIR=$2
 
-if [[ -z "${VERSION}" ]]; then
-        echo "Syntax: $0 <version>"
+if [[ -z "${DISTDIR}" ]]; then
+        echo "Syntax: $0 <version> <dist>"
         echo "  where version is an official kernel version, e.g. 4.4.39"
+        echo "        dist is a directory for the output, e.g. /dist"
         exit 1
 fi
 
 set -ex
+
+mkdir -p ${DISTDIR}
+
 
 CORES=`nproc`
 MAKEARGS=" -j${CORES} "
@@ -18,11 +23,21 @@ REVISION=`date +%Y%m%d`
 KDEB_PKGVERSION=${VERSION}-${REVISION}
 #KERNELRELEASE=4.4
 
-mkdir /build
+CROSS_COMPILE=/opt/cross/bin/amd64-linux-
+ARCH=x86_64
+export KBUILD_DEBARCH=amd64
+export KBUILD_BUILD_USER=build
+export KBUILD_BUILD_HOST=builder
+export KBUILD_BUILD_VERSION=1
+export KBUILD_BUILD_TIMESTAMP=`cat /src/timestamp-${VERSION}`
+
+
+mkdir -p /build
 cd /build
 
 wget https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-${VERSION}.tar.xz
 wget https://cdn.kernel.org/pub/linux/kernel/v4.x/linux-${VERSION}.tar.sign
+
 
 # Trust Greg Kroah-Hartman key
 gpg2 --keyserver hkp://keys.gnupg.net --recv-keys 38DBBDC86092693E
@@ -52,11 +67,12 @@ make -C tools/perf/Documentation/ check-man-tools
 
 make clean
 #make -j deb-pkg LOCALVERSION=-k8s KDEB_PKGVERSION=${KDEB_PKGVERSION} KDEB_SOURCENAME=${KDEB_SOURCENAME} KERNELRELEASE=${KERNELRELEASE}
-make ${MAKEARGS} deb-pkg LOCALVERSION=-k8s KDEB_PKGVERSION=${KDEB_PKGVERSION}
+make ${MAKEARGS} deb-pkg ARCH=${ARCH} CROSS_COMPILE=${CROSS_COMPILE} LOCALVERSION=-k8s KDEB_PKGVERSION=${KDEB_PKGVERSION}
 
-cp /build/*.deb /dist/
-cp /build/*.dsc /dist/
-cp /build/*.tar.gz /dist/
+
+cp /build/*.deb ${DISTDIR}/
+cp /build/*.dsc ${DISTDIR}/
+cp /build/*.tar.gz ${DISTDIR}/
 
 
 
@@ -120,4 +136,4 @@ rm -rf ./usr/libexec/
 cd ..
 
 fakeroot dpkg-deb --build linux-perf-4.4/
-cp *.deb /dist/
+cp *.deb ${DISTDIR}/
